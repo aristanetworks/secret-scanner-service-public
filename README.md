@@ -1,0 +1,1 @@
+# Secret Scanner Service (Public)
