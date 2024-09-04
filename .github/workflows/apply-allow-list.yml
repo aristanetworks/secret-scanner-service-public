@@ -1,0 +1,73 @@
+on: 
+  workflow_dispatch:
+    inputs:
+      repository:
+        required: true
+        type: string
+      branch:
+        required: true
+        type: string
+      service_run_id:
+        description: "Unique id used by secret scanner service to keep track of runs"
+        required: true
+        type: string
+      current_commit:
+        description: "If applying allow list, specify the latest commit hash to add to the secret's bug's fixlist"
+        required: true
+        type: string
+      issue_number:
+        description: "Number of the issue that originated this request"
+        required: true
+        type: string
+        default: "Manual"
+      offline:
+        description: "If true, update the service's database"
+        required: true
+        type: boolean
+        default: false
+name: Secret Scanner (Verify Allow List)
+run-name: ${{ format('Run {0} ({1}, issue {2})', inputs.service_run_id, inputs.repository, inputs.issue_number) }}
+permissions:
+  # Required to get a JWT
+  id-token: write
+  contents: read
+jobs:
+  apply-allow-list:
+    name: Apply allow list
+    runs-on: self-hosted
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - id: githubwebtoken
+        name: Get the JWT for authentication to secret service
+        uses: actions/github-script@v7
+        with:
+          script: |
+            let id_token = await core.getIDToken()
+            return id_token
+          result-encoding: string
+      - name: Generate an installation token for authentication to GitHub REST
+        id: generate-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.SECRET_SCANNER_APP_ID }}
+          private-key: ${{ secrets.SECRET_SCANNER_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.repository }}
+          token: ${{ steps.generate-token.outputs.token }}
+          ref: ${{ inputs.branch }}
+          fetch-depth: 0
+          path: target
+      - name: Run scanner in verification mode
+        uses: aristanetworks/secret-scanner-service-public@main
+        with:
+          repo_name: ${{ inputs.repository }}
+          mode: verification
+          internal_auth_token: ${{ steps.githubwebtoken.outputs.result }}
+          debug: true
+          offline: ${{ inputs.offline }}
+          current_commit: ${{ inputs.current_commit }}

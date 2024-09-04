@@ -24,6 +24,9 @@ inputs:
   offline:
     description: Do not report scan result to Secret Scanner Service.
     required: false
+  current_commit:
+    description: Commit hash of the commit that triggers this job.
+    required: false
   internal_auth_token:
     description: Auth token used to talk to the secrets service.
     required: false
@@ -57,8 +60,9 @@ runs:
           --json-file output.json \
           --markdown-file job_summary.md \
           ${{ inputs.debug && '--debug' }} \
-          ${{ inputs.offline && '--offline' }} \
+          ${{ inputs.offline == 'true' && '--offline' || '' }} \
           ${{ inputs.batch_size && format('--batch-size {0}', inputs.batch_size) }} \
+          ${{ inputs.current_commit && format('--current-commit {0}', inputs.current_commit) }} \
           ${{ github.event_name == 'pull_request' && format('--since-commit {0}', github.event.pull_request.base.sha) || ''}}
     - name: Write result to summary
       shell: bash
