@@ -2,9 +2,13 @@ name: Secret Scanner Service
 description: Scans secret in repository
 inputs:
   target:
-    description: Path of the checked out repository. Default to <github.workspace>/target.
+    description: Path of the checked out repository. Default to <github.workspace>/target for github.
     required: false
     default: target
+  vcs:
+    description: Version control system being scanned. 
+    required: false
+    default: github
   debug:
     description: If "true", print debug messages.
     required: false
@@ -52,10 +56,17 @@ runs:
     - name: Run scanner
       shell: bash
       run: |
-        docker run --rm -v ./${{ inputs.target }}:/tmp -w /tmp --name sss-scanner\
+        docker run --rm \
+          -v ./${{ inputs.target }}:/tmp \
+          -w /tmp \
+          --env SSS_SERVICE_URL="https://secret-scanner-service.infra.corp.arista.io/api/v1" \
+          --name sss-scanner \
           ${{ inputs.internal_auth_token && format('--env "JWT={0}"', inputs.internal_auth_token) }} \
           ${{ inputs.docker_registry }}/aristanetworks/secret-scanner-service:main \
-          scanner "${{ inputs.mode }}" /tmp github \
+          scanner \
+          ${{ inputs.mode }} \
+          /tmp \
+          ${{ inputs.vcs }} \
           ${{ inputs.repo_name || github.repository }} \
           --json-file output.json \
           --markdown-file job_summary.md \
