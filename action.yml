@@ -9,6 +9,10 @@ inputs:
     description: Version control system of the repo
     required: false
     default: github
+  target:
+    description: Location of the repo to be scanned
+    required: false
+    default: target
   offline:
     description: Send/apply scan result to service db
     required: false
@@ -31,9 +35,10 @@ runs:
   steps:
     - name: Clone repository
       uses: actions/checkout@v4
+      if: inputs.mode == 'commit'
       with:
         fetch-depth: 0
-        path: target
+        path: ${{ inputs.target }}
     - name: Load the prebuilt docker image
       shell: bash
       if: inputs.docker_image != null
@@ -48,7 +53,7 @@ runs:
         --env SSS_SERVICE_URL="https://secret-scanner-service.infra.corp.arista.io/api/v1"
         ${{ inputs.internal_auth_token && format('--env "JWT={0}"', inputs.internal_auth_token) }}
         --name secret-scanner
-        -v ./target:/target
+        -v ./${{ inputs.target }}:/target
         ${{ inputs.docker_registry }}/aristanetworks/secret-scanner-service:latest
         ${{ inputs.mode }}
         ${{ (inputs.mode != 'commit' && inputs.offline) && '--offline' || '' }}
