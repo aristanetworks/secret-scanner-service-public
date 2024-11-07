@@ -1,35 +1,20 @@
 name: Secret Scanner Service
 description: Scans secret in repository
 inputs:
-  target:
-    description: Path of the checked out repository. Default to <github.workspace>/target for github.
-    required: false
-    default: target
-  vcs:
-    description: Version control system being scanned. 
-    required: false
-    default: github
-  debug:
-    description: If "true", print debug messages.
-    required: false
   mode:
-    description: Type of scan. Either 'commit' or 'repo'. This setting is internal, and you are not meant to specify it.
+    description: Mode of scanning
     required: false
     default: commit
-  docker_image:
-    description: Use a local docker image instead of the registry
+  vcs:
+    description: Version control system of the repo
     required: false
-  repo_name:
-    description: Name of the scanned repo if different from the repo that the workflow runs in.
-    required: false
-  batch_size:
-    description: Number of commits to scan in a single job.
-    required: false
+    default: github
   offline:
-    description: Do not report scan result to Secret Scanner Service.
+    description: Send/apply scan result to service db
     required: false
-  current_commit:
-    description: Commit hash of the commit that triggers this job.
+    default: "true"
+  debug:
+    description: If "true", print debug messages.
     required: false
   internal_auth_token:
     description: Auth token used to talk to the secrets service.
@@ -38,52 +23,51 @@ inputs:
     description: Docker registry to use
     default: ghcr.io
     required: false
+  docker_image:
+    description: Use a local docker image instead of the registry
+    required: false
 runs:
   using: "composite"
   steps:
     - name: Clone repository
       uses: actions/checkout@v4
-      if: inputs.mode == 'commit'
       with:
         fetch-depth: 0
-        path: ${{ inputs.target }}
+        path: target
     - name: Load the prebuilt docker image
       shell: bash
       if: inputs.docker_image != null
       run: |
         docker load -i "./${{ inputs.docker_image }}"
-        docker tag sss-scanner:latest ${{ inputs.docker_registry }}/aristanetworks/secret-scanner-service:main
+        docker tag secret-scanner:latest ${{ inputs.docker_registry }}/aristanetworks/secret-scanner-service:latest
     - name: Run scanner
       shell: bash
-      run: |
-        docker run --rm \
-          -v ./${{ inputs.target }}:/tmp \
-          -w /tmp \
-          --env SSS_SERVICE_URL="https://secret-scanner-service.infra.corp.arista.io/api/v1" \
-          --name sss-scanner \
-          ${{ inputs.internal_auth_token && format('--env "JWT={0}"', inputs.internal_auth_token) }} \
-          ${{ inputs.docker_registry }}/aristanetworks/secret-scanner-service:main \
-          scanner \
-          ${{ inputs.mode }} \
-          /tmp \
-          ${{ inputs.vcs }} \
-          ${{ inputs.repo_name || github.repository }} \
-          --json-file output.json \
-          --markdown-file job_summary.md \
-          ${{ inputs.debug && '--debug' }} \
-          ${{ inputs.offline == 'true' && '--offline' || '' }} \
-          ${{ inputs.batch_size && format('--batch-size {0}', inputs.batch_size) }} \
-          ${{ inputs.current_commit && format('--current-commit {0}', inputs.current_commit) }} \
-          ${{ github.event_name == 'pull_request' && format('--since-commit {0}', github.event.pull_request.base.sha) || ''}}
-    - name: Write result to summary
+      run: >
+        docker run
+        --rm
+        --env SSS_SERVICE_URL="https://secret-scanner-service.infra.corp.arista.io/api/v1"
+        ${{ inputs.internal_auth_token && format('--env "JWT={0}"', inputs.internal_auth_token) }}
+        --name secret-scanner
+        -v ./target:/target
+        ${{ inputs.docker_registry }}/aristanetworks/secret-scanner-service:latest
+        ${{ inputs.mode }}
+        ${{ (inputs.mode != 'commit' && inputs.offline) && '--offline' || '' }}
+        ${{ github.event_name == 'pull_request' && format('--since-commit {0}', github.event.pull_request.base.sha) || ''}}
+        ${{ inputs.vcs }}
+        ${{ github.repository }}
+        /target
+        --json-file output.json
+        --markdown-file job_summary.md
+        ${{ inputs.debug && '--debug' }}
+    - name: Write result to summary 
       shell: bash
       if: ${{ always() }}
-      run: cat ./${{ inputs.target }}/job_summary.md >> $GITHUB_STEP_SUMMARY
+      run: |
+        cat ./target/job_summary.md >> $GITHUB_STEP_SUMMARY
     - name: Upload scan results as artifacts
       uses: actions/upload-artifact@v4
-      if: inputs.mode != 'repo'
       with:
         name: Scan results
         path: |
-          ./${{ inputs.target }}/output.json
-          ./${{ inputs.target }}/job_summary.md
+          ./target/output.json
+          ./target/job_summary.md
