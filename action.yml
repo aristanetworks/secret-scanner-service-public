@@ -1,6 +1,10 @@
 name: Secret Scanner Service
 description: Scans secret in repository
 inputs:
+  name:
+    description: Name of the repo/project
+    required: false
+    default: ${{ github.repository }}
   mode:
     description: Mode of scanning
     required: false
@@ -59,7 +63,7 @@ runs:
         ${{ (inputs.mode != 'commit' && inputs.offline) && '--offline' || '' }}
         ${{ github.event_name == 'pull_request' && format('--since-commit {0}', github.event.pull_request.base.sha) || ''}}
         ${{ inputs.vcs }}
-        ${{ github.repository }}
+        ${{ inputs.name }}
         /target
         --json-file output.json
         --markdown-file job_summary.md
@@ -68,11 +72,11 @@ runs:
       shell: bash
       if: ${{ always() }}
       run: |
-        cat ./target/job_summary.md >> $GITHUB_STEP_SUMMARY
+        cat ./${{ inputs.target }}/job_summary.md >> $GITHUB_STEP_SUMMARY
     - name: Upload scan results as artifacts
       uses: actions/upload-artifact@v4
       with:
         name: Scan results
         path: |
-          ./target/output.json
-          ./target/job_summary.md
+          ./${{ inputs.target }}/output.json
+          ./${{ inputs.target }}/job_summary.md
