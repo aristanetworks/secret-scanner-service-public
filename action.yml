@@ -65,18 +65,18 @@ runs:
         ${{ inputs.vcs }}
         ${{ inputs.name }}
         /target
-        --json-file output.json
-        --markdown-file job_summary.md
+        --json-file ${{ inputs.target }}-output.json
+        --markdown-file ${{ inputs.target }}-job_summary.md
         ${{ inputs.debug && '--debug' }}
     - name: Write result to summary 
       shell: bash
       if: ${{ always() }}
       run: |
-        cat ./${{ inputs.target }}/job_summary.md >> $GITHUB_STEP_SUMMARY
+        cat ./${{ inputs.target }}/${{ inputs.target }}-job_summary.md >> $GITHUB_STEP_SUMMARY
     - name: Upload scan results as artifacts
       uses: actions/upload-artifact@v4
       with:
         name: Scan results
         path: |
-          ./${{ inputs.target }}/output.json
-          ./${{ inputs.target }}/job_summary.md
+          ./${{ inputs.target }}/${{ inputs.target }}-output.json
+          ./${{ inputs.target }}/${{ inputs.target }}-job_summary.md
